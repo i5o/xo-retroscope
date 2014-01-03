@@ -5,7 +5,7 @@
 #
 # See COPYING for licensing information
 #
-# Activity web site: 
+# Activity web site:
 # Created: December 2008
 # Author: gabriel.burt@gmail.com
 # Home page: http://gburt.blogspot.com/
@@ -13,21 +13,14 @@
 import gi
 gi.require_version('Gst', '1.0')
 
-from gi.repository import Gdk
 from gi.repository import Gtk
 from gi.repository import GObject
 from gi.repository import Gst
-from gi.repository import GstVideo
 
 from sugar3.activity import activity
 from sugar3.activity.widgets import ActivityToolbarButton, StopButton
 from sugar3.graphics.toolbarbox import ToolbarBox
 from gettext import gettext as _
-import math
-import time
-import json
-import os
-import logging
 
 GObject.threads_init()
 Gst.init([])
@@ -56,7 +49,6 @@ class RetroscopeActivity(activity.Activity):
         xid = self.video_window.get_property('window').get_xid()
         self.retroscope = Retroscope(xid)
         self.retroscope.play()
-
 
     def build_toolbar(self):
         toolbar_box = ToolbarBox()
@@ -104,7 +96,7 @@ class Retroscope:
     def __init__(self, window_id):
         self.window_id = window_id
         self.pipeline = Gst.Pipeline()
-        
+
         self.camera = Gst.ElementFactory.make('v4l2src', "webcam")
         self.queue = Gst.ElementFactory.make('queue', "queue")
         self.videoflip = Gst.ElementFactory.make('videoflip', None)
@@ -126,7 +118,6 @@ class Retroscope:
         self.bus.enable_sync_message_emission()
         self.bus.connect('sync-message', self.sync_message)
 
-
     def set_delay(self, seconds):
         seconds = int(seconds)
         if seconds < 0 or seconds > MAX_DELAY:
@@ -136,9 +127,9 @@ class Retroscope:
         self.queue.set_property('max-size-time',
             int((seconds + 1.0) * 1000000000.0))
         self.queue.set_property('max-size-bytes',
-            int(mult*3225600. * (seconds + 1)))
+            int(mult * 3225600. * (seconds + 1)))
         self.queue.set_property('max-size-buffers',
-            int(mult*7. * (seconds + 1)))
+            int(mult * 7. * (seconds + 1)))
         self.queue.set_property('min-threshold-time',
             int(seconds * 1000000000.0))
 
