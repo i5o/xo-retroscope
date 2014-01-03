@@ -1,7 +1,7 @@
 #!/usr/bin/python
-# coding=UTF-8
-
+# -*- coding: utf-8 -*-
 # Copyright 2008 Gabriel Burt
+# Copyright (C) 2014 Ignacio Rodríguez
 #
 # See COPYING for licensing information
 #
@@ -10,21 +10,17 @@
 # Author: gabriel.burt@gmail.com
 # Home page: http://gburt.blogspot.com/
 
-"""\
-RetroScope XO activity.
+import gi
+gi.require_version('Gst', '1.0')
 
-TODO:
-- 
-"""
+from gi.repository import GObject
+from gi.repository import Gtk
+from gi.repository import Gdk
+from gi.repository import Gst
 
-import pygst
-pygst.require('0.10')
-import gst
-
-import gtk
-import gobject
-from sugar.activity import activity
-from sugar.graphics.toolbutton import ToolButton
+from sugar3.activity import activity
+from sugar3.activity.widgets import ActivityToolbarButton, StopButton
+from sugar3.graphics.toolbarbox import ToolbarBox
 from gettext import gettext as _
 import math
 import time
@@ -32,141 +28,131 @@ import json
 import os
 import logging
 
-gobject.threads_init()
-gtk.gdk.threads_init()
+GObject.threads_init()
+Gdk.threads_init()
+Gst.init([])
 
 # Through trial and error this is about the max # of seconds
 # that seems to work before we sap the XO of memory
 MAX_DELAY = 10
+
 
 class RetroscopeActivity(activity.Activity):
 
     """RetroScope activity."""
     def __init__(self, handle):
         activity.Activity.__init__(self, handle)
-        self._name = handle
-        self.set_title(_("RetroScope"))
-
+        self.max_participants = 1
         self.active = False
-        self.connect("notify::active", self.activity_active_callback)
+        self.source_id = None
+        self.retroscope = None
 
-        # Create the main layout box
-        box = gtk.VBox(homogeneous=False)
 
-        # Create the video pipeline
-        self.retroscope = Retroscope()
+        self.video_window = Gtk.DrawingArea()
+        self.video_window.connect('realize', self.__realize_cb)
+
         self.delay = 3
 
-        # Create the main video window
-        self.video_window = gtk.DrawingArea()
-        self.video_window.show()
-        box.pack_start(self.video_window)
+        toolbar = self.build_toolbar()
+        self.set_toolbar_box(toolbar)
+        self.set_canvas(self.video_window)
+        self.show_all()
 
-        # Create the top toolbar
-        toolbox = activity.ActivityToolbox(self)
-        self.set_toolbox(toolbox)
+    def __realize_cb(self, widget):
+        Gtk.DrawingArea.do_realize(widget)
+        if not self.retroscope:
+            self.retroscope = Retroscope(self.video_window.get_window().get_xid())
 
-        # Create the settings menu in the top toolbar
-        settings_bar = self.make_settings_bar()
-        toolbox.add_toolbar(_("Settings"), settings_bar)
+        if not self.source_id and self.retroscope:
+            self.source_id = GObject.timeout_add(1000, self.set_video_window)
 
-        # Show everything
-        self.set_canvas(box)
-        toolbox.show_all()
-        box.show_all()
+    def build_toolbar(self):
+        toolbar_box = ToolbarBox()
+        toolbar = toolbar_box.toolbar
 
-        # Hide the share and keep options, for now
-        activity_toolbar = toolbox.get_activity_toolbar()
-        activity_toolbar.share.props.visible = False
-        activity_toolbar.keep.props.visible = False
+        activity = ActivityToolbarButton(self)
+        stop = StopButton(self)
+        separator = Gtk.SeparatorToolItem()
+        separator.props.draw = False
+        separator.set_expand(True)
 
-        self.active = True
+        # Allow being zero to MAX_DELAY seconds retro, default to self.delay
+        retroness = Gtk.Adjustment.new(self.delay, 0, MAX_DELAY, 1, 10, 0)
+        retroness.connect("value_changed", self.retroness_adjusted_cb)
 
-        gobject.timeout_add(1000, self.set_video_window)
+        retro_bar = Gtk.HScale.new(retroness)
+        retro_bar.set_digits(0)
+        retro_bar.set_value_pos(Gtk.PositionType.RIGHT)
+        retro_bar.set_size_request(240, 15)
+
+        retro_tool = Gtk.ToolItem()
+        retro_tool.add(retro_bar)
+
+        label = Gtk.ToolItem()
+        label.add(Gtk.Label(_("Seconds Delayed:")))
+
+        toolbar.insert(activity, -1)
+        toolbar.insert(Gtk.SeparatorToolItem(), -1)
+        toolbar.insert(label, -1)
+        toolbar.insert(retro_tool, -1)
+        toolbar.insert(separator, -1)
+        toolbar.insert(stop, -1)
+
+        return toolbar_box
 
     def set_video_window(self):
-        # Keep waiting for the window to not be None
-        if self.video_window.window == None:
+        if self.video_window.get_window() == None:
             return True
 
-        # Now we have somewhere to show the video
-        self.retroscope.sink.set_xwindow_id(self.video_window.window.xid)
+        #xid = self.video_window.get_window().get_xid()
+        #self.retroscope.sink.set_window_handle(xid)
         self.retroscope.set_delay(self.delay)
         self.retroscope.play()
 
-    # Abusing this can-we-close hook to tidy up
     def can_close(self):
         self.retroscope.stop()
         return True
 
-    # Widget construction methods
-    def make_settings_bar(self):
-        settings_bar = gtk.Toolbar()
-
-        label = gtk.ToolItem()
-        label.add(gtk.Label(_("Seconds Delayed:")))
-        settings_bar.insert(label, -1)
-
-        # Allow being zero to MAX_DELAY seconds retro, default to self.delay
-        retroness = gtk.Adjustment(self.delay, 0, MAX_DELAY, 1, 10, 0)
-        retroness.connect("value_changed", self.retroness_adjusted_cb, retroness)
-
-        retro_bar = gtk.HScale(retroness)
-        retro_bar.set_digits(0)
-        retro_bar.set_value_pos(gtk.POS_RIGHT)
-        retro_bar.set_size_request(240, 15)
-
-        retro_tool = gtk.ToolItem()
-        retro_tool.add(retro_bar)
-        settings_bar.insert(retro_tool, -1)
-
-        return settings_bar
-
-    # Callbacks
-    def retroness_adjusted_cb(self, get, retroness):
-        self.delay = retroness.value
-        print 'got retroness value changed to ', self.delay
+    def retroness_adjusted_cb(self, widget):
+        self.delay = widget.get_value()
         self.retroscope.set_delay(self.delay)
 
-    def activity_active_callback(self, widget, pspec):
-        print 'active =', self.active
-        print 'props.active =', self.props.active
 
 class Retroscope:
-    def __init__(self):
-        self.pipeline = gst.parse_launch(
-            'v4l2src name=v4l ! video/x-raw-yuv, framerate=15/1 ! ffmpegcolorspace name=origin ! tee name=tee'
-        )
-        #self.pipeline.get_bus().set_sync_handler(print_bus_msg)
+    def __init__(self, window_id):
+        self.window_id = window_id
+        self.pipeline = Gst.Pipeline()
 
-        # Create special pipeline elements
-        self.queue      = gst.element_factory_make('queue')
-        self.videoflip  = gst.element_factory_make('videoflip')
-        self.colorspace = gst.element_factory_make('ffmpegcolorspace')
-        self.sink       = gst.element_factory_make('xvimagesink')
+        self.camera = Gst.ElementFactory.make('v4l2src', None)
+        self.queue = Gst.ElementFactory.make('queue', None)
+        self.videoflip = Gst.ElementFactory.make('videoflip', None)
+        self.colorspace = Gst.ElementFactory.make('videoconvert', None)
+        self.sink = Gst.ElementFactory.make('xvimagesink', None)
 
-        # Set some properties on them
         self.queue.set_property('leaky', True)
         self.sink.set_property('sync', False)
         self.sink.set_property('handle-events', True)
         self.sink.set_property('force-aspect-ratio', True)
-        # 0 = normal, 1 = 90 CW, 2 = 180, 3 = 90 CCW, 4 = mirrored (default)
         self.videoflip.set_property('method', 4)
 
-        self.elements = [self.queue, self.videoflip, self.colorspace, self.sink]
+        self.elements = [self.queue, self.videoflip,
+            self.colorspace, self.sink]
 
-        prev_element = self.pipeline.get_by_name('tee')
-        for element in self.elements:
-            self.pipeline.add(element)
-            prev_element.link(element)
-            prev_element = element
+        prev_element = None
+        self.pipeline.add(self.sink)
+        self.sink.link(self.camera)
+        self.camera.link(self.colorspace)
 
         self.sink.set_property('handle-events', True)
+
+        self.bus = self.pipeline.get_bus()
+        self.bus.enable_sync_message_emission()
+        self.bus.connect('sync-message', self.__sync_message)
+
 
     def set_delay(self, seconds):
         seconds = int(seconds)
         if seconds < 0 or seconds > MAX_DELAY:
-            print 'Delay must be greater than 0 and less than', MAX_DELAY, 'seconds.'
             return
 
         mult = 4.
@@ -176,10 +162,18 @@ class Retroscope:
         self.queue.set_property('min-threshold-time', int(seconds * 1000000000.0))
 
     def play(self):
-        self.pipeline.set_state(gst.STATE_PLAYING)
+        self.pipeline.set_state(Gst.State.PLAYING)
 
     def pause(self):
-        self.pipeline.set_state(gst.STATE_PAUSED)
+        self.pipeline.set_state(Gst.State.PAUSED)
 
     def stop(self):
-        self.pipeline.set_state(gst.STATE_NULL)
+        self.pipeline.set_state(Gst.State.NULL)
+
+    def __sync_message(self, bus, message):
+        try:
+            if message.get_structure().get_name() == 'prepare-window-handle':
+                message.src.set_window_handle(self.window_id)
+                return
+        except:
+            pass
