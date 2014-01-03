@@ -1,0 +1,3 @@
+- Allow 'keeping' (minimizing) the activity
+  - Stop the pipeline so other apps can use the camera
+  - Resume when activated again

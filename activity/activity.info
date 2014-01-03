@@ -1,0 +1,9 @@
+[Activity]
+name = RetroScope
+activity_version = 1
+host_version = 1
+bundle_id = com.gburt.Retroscope
+icon = activity-retroscope
+class = retroscope.RetroscopeActivity
+show_launcher = yes
+license = MIT
