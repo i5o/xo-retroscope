@@ -5,7 +5,7 @@
 #
 # See COPYING for licensing information
 #
-# Activity web site: 
+# Activity web site:
 # Created: December 2008
 # Author: gabriel.burt@gmail.com
 # Home page: http://gburt.blogspot.com/
@@ -14,7 +14,7 @@
 RetroScope XO activity.
 
 TODO:
-- 
+-
 """
 
 import pygst
@@ -27,11 +27,6 @@ from sugar.activity import activity
 from sugar.activity.widgets import ActivityToolbarButton, StopButton
 from sugar.graphics.toolbarbox import ToolbarBox
 from gettext import gettext as _
-import math
-import time
-import json
-import os
-import logging
 
 gobject.threads_init()
 gtk.gdk.threads_init()
@@ -40,6 +35,7 @@ gtk.gdk.threads_init()
 # that seems to work before we sap the XO of memory
 MAX_DELAY = 10
 
+
 class RetroscopeActivity(activity.Activity):
 
     """RetroScope activity."""
@@ -47,12 +43,10 @@ class RetroscopeActivity(activity.Activity):
         activity.Activity.__init__(self, handle)
         self._name = handle
         self.set_title(_("RetroScope"))
+        self.max_participants = 1
 
         self.active = False
         self.connect("notify::active", self.activity_active_callback)
-
-        # Create the main layout box
-        box = gtk.VBox(homogeneous=False)
 
         # Create the video pipeline
         self.retroscope = Retroscope()
@@ -60,21 +54,18 @@ class RetroscopeActivity(activity.Activity):
 
         # Create the main video window
         self.video_window = gtk.DrawingArea()
-        self.video_window.show()
-        box.pack_start(self.video_window)
 
         # Create the top toolbar
         toolbox = self.build_toolbar()
         self.set_toolbar_box(toolbox)
 
         # Show everything
-        self.set_canvas(box)
-        toolbox.show_all()
-        box.show_all()
+        self.set_canvas(self.video_window)
+        self.show_all()
 
         self.active = True
 
-        gobject.timeout_add(1000, self.set_video_window)
+        gobject.idle_add(self.set_video_window)
 
     def build_toolbar(self):
         toolbar_box = ToolbarBox()
@@ -111,7 +102,7 @@ class RetroscopeActivity(activity.Activity):
 
     def set_video_window(self):
         # Keep waiting for the window to not be None
-        if self.video_window.window == None:
+        if not self.video_window.window:
             return True
 
         # Now we have somewhere to show the video
@@ -123,9 +114,9 @@ class RetroscopeActivity(activity.Activity):
     def can_close(self):
         self.retroscope.stop()
         return True
-    
+
     # Callbacks
-    def retroness_adjusted_cb(self, get, retroness):
+    def retroness_adjusted_cb(self, retroness):
         self.delay = retroness.value
         print 'got retroness value changed to ', self.delay
         self.retroscope.set_delay(self.delay)
@@ -134,18 +125,20 @@ class RetroscopeActivity(activity.Activity):
         print 'active =', self.active
         print 'props.active =', self.props.active
 
+
 class Retroscope:
     def __init__(self):
         self.pipeline = gst.parse_launch(
-            'v4l2src name=v4l ! video/x-raw-yuv, framerate=15/1 ! ffmpegcolorspace name=origin ! tee name=tee'
+            'v4l2src name=v4l ! video/x-raw-yuv, framerate=15/1 ! '
+            'ffmpegcolorspace name=origin ! tee name=tee'
         )
         #self.pipeline.get_bus().set_sync_handler(print_bus_msg)
 
         # Create special pipeline elements
-        self.queue      = gst.element_factory_make('queue')
-        self.videoflip  = gst.element_factory_make('videoflip')
+        self.queue = gst.element_factory_make('queue')
+        self.videoflip = gst.element_factory_make('videoflip')
         self.colorspace = gst.element_factory_make('ffmpegcolorspace')
-        self.sink       = gst.element_factory_make('xvimagesink')
+        self.sink = gst.element_factory_make('xvimagesink')
 
         # Set some properties on them
         self.queue.set_property('leaky', True)
@@ -168,14 +161,19 @@ class Retroscope:
     def set_delay(self, seconds):
         seconds = int(seconds)
         if seconds < 0 or seconds > MAX_DELAY:
-            print 'Delay must be greater than 0 and less than', MAX_DELAY, 'seconds.'
+            print 'Delay must be greater than 0 and less than', \
+                MAX_DELAY, 'seconds.'
             return
 
         mult = 4.
-        self.queue.set_property('max-size-time', int((seconds + 1.0) * 1000000000.0))
-        self.queue.set_property('max-size-bytes', int(mult*3225600. * (seconds + 1)))
-        self.queue.set_property('max-size-buffers', int(mult*7. * (seconds + 1)))
-        self.queue.set_property('min-threshold-time', int(seconds * 1000000000.0))
+        self.queue.set_property('max-size-time',
+            int((seconds + 1.0) * 1000000000.0))
+        self.queue.set_property('max-size-bytes',
+            int(mult * 3225600. * (seconds + 1)))
+        self.queue.set_property('max-size-buffers',
+            int(mult * 7. * (seconds + 1)))
+        self.queue.set_property('min-threshold-time',
+            int(seconds * 1000000000.0))
 
     def play(self):
         self.pipeline.set_state(gst.STATE_PLAYING)
