@@ -1,6 +1,6 @@
 [Activity]
 name = RetroScope
-activity_version = 1
+activity_version = 2
 bundle_id = com.gburt.Retroscope
 icon = activity-retroscope
 exec = sugar-activity retroscope.RetroscopeActivity
