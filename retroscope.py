@@ -24,7 +24,8 @@ import gst
 import gtk
 import gobject
 from sugar.activity import activity
-from sugar.graphics.toolbutton import ToolButton
+from sugar.activity.widgets import ActivityToolbarButton, StopButton
+from sugar.graphics.toolbarbox import ToolbarBox
 from gettext import gettext as _
 import math
 import time
@@ -63,26 +64,50 @@ class RetroscopeActivity(activity.Activity):
         box.pack_start(self.video_window)
 
         # Create the top toolbar
-        toolbox = activity.ActivityToolbox(self)
-        self.set_toolbox(toolbox)
-
-        # Create the settings menu in the top toolbar
-        settings_bar = self.make_settings_bar()
-        toolbox.add_toolbar(_("Settings"), settings_bar)
+        toolbox = self.build_toolbar()
+        self.set_toolbar_box(toolbox)
 
         # Show everything
         self.set_canvas(box)
         toolbox.show_all()
         box.show_all()
 
-        # Hide the share and keep options, for now
-        activity_toolbar = toolbox.get_activity_toolbar()
-        activity_toolbar.share.props.visible = False
-        activity_toolbar.keep.props.visible = False
-
         self.active = True
 
         gobject.timeout_add(1000, self.set_video_window)
+
+    def build_toolbar(self):
+        toolbar_box = ToolbarBox()
+        toolbar = toolbar_box.toolbar
+
+        activity = ActivityToolbarButton(self)
+        stop = StopButton(self)
+        separator = gtk.SeparatorToolItem()
+        separator.props.draw = False
+        separator.set_expand(True)
+
+        retroness = gtk.Adjustment(3, 0, MAX_DELAY, 1, 10, 0)
+        retroness.connect("value_changed", self.retroness_adjusted_cb)
+
+        retro_bar = gtk.HScale(retroness)
+        retro_bar.set_digits(0)
+        retro_bar.set_value_pos(gtk.POS_RIGHT)
+        retro_bar.set_size_request(240, 15)
+
+        retro_tool = gtk.ToolItem()
+        retro_tool.add(retro_bar)
+
+        label = gtk.ToolItem()
+        label.add(gtk.Label(_("Seconds Delayed:")))
+
+        toolbar.insert(activity, -1)
+        toolbar.insert(gtk.SeparatorToolItem(), -1)
+        toolbar.insert(label, -1)
+        toolbar.insert(retro_tool, -1)
+        toolbar.insert(separator, -1)
+        toolbar.insert(stop, -1)
+
+        return toolbar_box
 
     def set_video_window(self):
         # Keep waiting for the window to not be None
@@ -98,30 +123,7 @@ class RetroscopeActivity(activity.Activity):
     def can_close(self):
         self.retroscope.stop()
         return True
-
-    # Widget construction methods
-    def make_settings_bar(self):
-        settings_bar = gtk.Toolbar()
-
-        label = gtk.ToolItem()
-        label.add(gtk.Label(_("Seconds Delayed:")))
-        settings_bar.insert(label, -1)
-
-        # Allow being zero to MAX_DELAY seconds retro, default to self.delay
-        retroness = gtk.Adjustment(self.delay, 0, MAX_DELAY, 1, 10, 0)
-        retroness.connect("value_changed", self.retroness_adjusted_cb, retroness)
-
-        retro_bar = gtk.HScale(retroness)
-        retro_bar.set_digits(0)
-        retro_bar.set_value_pos(gtk.POS_RIGHT)
-        retro_bar.set_size_request(240, 15)
-
-        retro_tool = gtk.ToolItem()
-        retro_tool.add(retro_bar)
-        settings_bar.insert(retro_tool, -1)
-
-        return settings_bar
-
+    
     # Callbacks
     def retroness_adjusted_cb(self, get, retroness):
         self.delay = retroness.value
