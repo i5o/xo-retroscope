@@ -16,6 +16,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gtk
 from gi.repository import GObject
 from gi.repository import Gst
+from gi.repository import GstVideo
 
 from sugar3.activity import activity
 from sugar3.activity.widgets import ActivityToolbarButton, StopButton
@@ -48,6 +49,7 @@ class RetroscopeActivity(activity.Activity):
     def setup_init(self):
         xid = self.video_window.get_property('window').get_xid()
         self.retroscope = Retroscope(xid)
+        self.retroscope.set_delay(3)
         self.retroscope.play()
 
     def build_toolbar(self):
